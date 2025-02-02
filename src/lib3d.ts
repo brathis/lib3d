@@ -1,82 +1,135 @@
 import { matmul4 } from "./matrix";
+// @ts-ignore this is esbuild magic
 import vertexShader from "./vertex.glsl";
+// @ts-ignore this is esbuild magic
 import fragmentShader from "./fragment.glsl";
 
 /**
  * Lib3d
  *
- * A graphics library for drawing triangles using WebGL
+ * A graphics library for drawing triangles and lines using WebGL
  *
  */
-
-export class Lib3dVertex {
-  constructor(x, y, z) {
-    this.x = x;
-    this.y = y;
-    this.z = z;
-  }
+export interface Lib3dVertex {
+  x: number;
+  y: number;
+  z: number;
 }
 
-export class Lib3dColor {
-  constructor(r, g, b, a) {
-    this.r = r;
-    this.g = g;
-    this.b = b;
-    this.a = a;
-  }
+export interface Lib3dColor {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
 }
 
-export class Lib3dCameraParameters {
-  constructor(f, width, height, zfar, znear) {
-    this.f = f;
-    this.width = width;
-    this.height = height;
-    this.zfar = zfar;
-    this.znear = znear;
-  }
+export interface Lib3dCameraParameters {
+  f: number;
+  width: number;
+  height: number;
+  zfar: number;
+  znear: number;
 }
 
-export class Lib3dCameraOrientation {
-  constructor(vx, vy, vz) {
-    this.vx = vx;
-    this.vy = vy;
-    this.vz = vz;
-  }
+export interface Lib3dCameraOrientation {
+  vx: Lib3dVertex;
+  vy: Lib3dVertex;
+  vz: Lib3dVertex;
 }
 
-export class Lib3dCamera {
-  constructor(parameters, position, orientation) {
-    this.parameters = parameters;
-    this.position = position;
-    this.orientation = orientation;
-  }
+export interface Lib3dCamera {
+  parameters: Lib3dCameraParameters;
+  position: Lib3dVertex;
+  orientation: Lib3dCameraOrientation;
 }
 
-export class Lib3dTriangle {
-  constructor(v1, v2, v3, c) {
-    this.v1 = v1;
-    this.v2 = v2;
-    this.v3 = v3;
-    this.c = c;
-  }
+export interface Lib3dTriangle {
+  v1: Lib3dVertex;
+  v2: Lib3dVertex;
+  v3: Lib3dVertex;
+  c: Lib3dColor;
 }
 
-export class Lib3dLine {
-  constructor(v1, v2, c) {
-    this.v1 = v1;
-    this.v2 = v2;
-    this.c = c;
-  }
+export interface Lib3dLine {
+  v1: Lib3dVertex;
+  v2: Lib3dVertex;
+  c: Lib3dColor;
 }
 
 export class Lib3d {
-  #createProgram(vertexShaderSource, fragmentShaderSource) {
-    const shaders = [];
-    for (const [shaderSource, shaderType] of [
-      [vertexShaderSource, this.webgl.VERTEX_SHADER],
-      [fragmentShaderSource, this.webgl.FRAGMENT_SHADER],
+  private webgl: WebGLRenderingContext;
+  private camera: Lib3dCamera;
+  private inverseMatrix: Float32Array;
+  private projectionMatrix: Float32Array;
+  private invertCameraPositionMatrix: Float32Array;
+  private invertCameraOrientationMatrix: Float32Array;
+
+  private triangleProgram: WebGLProgram;
+  private trianglePositionBuffer: WebGLBuffer;
+  private triangleColorBuffer: WebGLBuffer;
+  private triangleUniformMatrixLocation: WebGLUniformLocation | null;
+  private triangles: Lib3dTriangle[];
+  private trianglePositionBufferContent: number[];
+  private triangleColorBufferContent: number[];
+
+  private lineProgram: WebGLProgram;
+  private linePositionBuffer: WebGLBuffer;
+  private lineColorBuffer: WebGLBuffer;
+  private lineUniformMatrixLocation: WebGLUniformLocation | null;
+  private lines: Lib3dLine[];
+  private linePositionBufferContent: number[];
+  private lineColorBufferContent: number[];
+
+  constructor(
+    canvas: HTMLCanvasElement,
+    cameraParameters: Lib3dCameraParameters,
+    cameraPosition: Lib3dVertex,
+    cameraOrientation: Lib3dCameraOrientation
+  ) {
+    const context = canvas.getContext("webgl");
+    if (!context) {
+      throw new Error("WebGL not supported");
+    }
+    this.webgl = context;
+
+    this.triangleProgram = this.#createProgram(vertexShader, fragmentShader);
+    this.lineProgram = this.#createProgram(vertexShader, fragmentShader);
+
+    this.#setupMatrices();
+    this.#setupTriangleProgram();
+    this.#setupLineProgram();
+    this.camera = {
+      parameters: cameraParameters,
+      position: cameraPosition,
+      orientation: cameraOrientation,
+    };
+    this.#computeProjectionMatrix();
+    this.#computeInvertCameraOrientationMatrix();
+    this.#computeInvertCameraPositionMatrix();
+    this.#computeMatrix();
+    console.info("Lib3d initialized 🚀");
+  }
+
+  #createProgram(
+    vertexShaderSource: string,
+    fragmentShaderSource: string
+  ): WebGLProgram {
+    const shaders: WebGLShader[] = [];
+    for (const shaderSourceAndType of [
+      {
+        shaderSource: vertexShaderSource,
+        shaderType: this.webgl.VERTEX_SHADER,
+      },
+      {
+        shaderSource: fragmentShaderSource,
+        shaderType: this.webgl.FRAGMENT_SHADER,
+      },
     ]) {
+      const { shaderSource, shaderType } = shaderSourceAndType;
       const shader = this.webgl.createShader(shaderType);
+      if (shader === null) {
+        throw new Error("failed to create shader");
+      }
       this.webgl.shaderSource(shader, shaderSource);
       this.webgl.compileShader(shader);
       if (!this.webgl.getShaderParameter(shader, this.webgl.COMPILE_STATUS)) {
@@ -127,32 +180,6 @@ export class Lib3d {
     this.webgl.clearColor(1, 1, 1, 1);
     this.webgl.clearDepth(-1.0);
     this.webgl.clear(this.webgl.COLOR_BUFFER_BIT | this.webgl.DEPTH_BUFFER_BIT);
-  }
-
-  constructor(canvas) {
-    /** @type {WebGLRenderingContext} */
-    this.webgl = canvas.getContext("webgl");
-    if (!this.webgl) {
-      throw new Error("WebGL not supported");
-    }
-
-    this.triangleProgram = this.#createProgram(vertexShader, fragmentShader);
-    this.lineProgram = this.#createProgram(vertexShader, fragmentShader);
-
-    // TODO: this has to be passed to the constructor
-    this.camera = new Lib3dCamera(
-      new Lib3dCameraParameters(1, 2, 2, 10, 0.1),
-      new Lib3dVertex(0, 0, 0),
-      new Lib3dCameraOrientation(
-        new Lib3dVertex(1, 0, 0),
-        new Lib3dVertex(0, 1, 0),
-        new Lib3dVertex(0, 0, 1)
-      )
-    );
-    this.#setupMatrices();
-    this.#setupTriangleProgram();
-    this.#setupLineProgram();
-    console.info("Lib3d initialized 🚀");
   }
 
   #setupMatrices() {
@@ -337,16 +364,6 @@ export class Lib3d {
     this.webgl.drawArrays(this.webgl.LINES, 0, 2 * this.lines.length);
   }
 
-  addTriangle(triangle) {
-    this.triangles.push(triangle);
-    this.#updateTriangleBuffers();
-  }
-
-  addLine(line) {
-    this.lines.push(line);
-    this.#updateLineBuffers();
-  }
-
   #computeMatrix() {
     this.inverseMatrix = new Float32Array(
       matmul4(
@@ -396,8 +413,6 @@ export class Lib3d {
 
     // console.info('Projection matrix:')
     // printMat4(this.projectionMatrix);
-
-    this.#computeMatrix();
   }
 
   #computeInvertCameraPositionMatrix() {
@@ -407,8 +422,6 @@ export class Lib3d {
 
     // console.info('Inverse camera position matrix:')
     // printMat4(this.invertCameraPositionMatrix);
-
-    this.#computeMatrix();
   }
 
   #computeInvertCameraOrientationMatrix() {
@@ -460,21 +473,29 @@ export class Lib3d {
 
     // console.info('Inverse camera orientation matrix:')
     // printMat4(this.invertCameraOrientationMatrix);
-
-    this.#computeMatrix();
   }
 
-  setCameraPosition(v) {
+  addTriangle(triangle: Lib3dTriangle) {
+    this.triangles.push(triangle);
+    this.#updateTriangleBuffers();
+  }
+
+  addLine(line: Lib3dLine) {
+    this.lines.push(line);
+    this.#updateLineBuffers();
+  }
+
+  setCameraPosition(v: Lib3dVertex) {
     this.camera.position = v;
     this.#computeInvertCameraPositionMatrix();
   }
 
-  setCameraOrientation(o) {
+  setCameraOrientation(o: Lib3dCameraOrientation) {
     this.camera.orientation = o;
     this.#computeInvertCameraOrientationMatrix();
   }
 
-  setCameraParameters(p) {
+  setCameraParameters(p: Lib3dCameraParameters) {
     this.camera.parameters = p;
     this.#computeProjectionMatrix();
   }

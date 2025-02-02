@@ -1,9 +1,9 @@
 {
   "scripts": {
-    "build": "esbuild src/lib3d.js --bundle --outfile=dist/lib3d.js --loader:.glsl=text",
-    "watch": "esbuild src/lib3d.js --bundle --outfile=dist/lib3d.js --loader:.glsl=text --watch",
-    "build-example": "esbuild examples/triangles/index.js --bundle --outfile=examples/triangles/dist/index.js --loader:.glsl=text",
-    "watch-example": "esbuild examples/triangles/index.js --bundle --outfile=examples/triangles/dist/index.js --loader:.glsl=text --watch",
+    "build": "esbuild src/lib3d.ts --bundle --outfile=dist/lib3d.js --loader:.glsl=text",
+    "watch": "esbuild src/lib3d.ts --bundle --outfile=dist/lib3d.js --loader:.glsl=text --watch",
+    "build-example": "esbuild examples/triangles/index.ts --bundle --outfile=examples/triangles/dist/index.js --loader:.glsl=text",
+    "watch-example": "esbuild examples/triangles/index.ts --bundle --outfile=examples/triangles/dist/index.js --loader:.glsl=text --watch",
     "serve": "vite --port 4200 --host"
   },
   "devDependencies": {
