@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lib3d - sphere</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+      crossorigin="anonymous"
+    />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      .sphere-canvas {
+        max-width: 400px;
+        margin: 0 auto;
+      }
+
+      .status-and-controls {
+        /* max-width: 50%; */
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container d-flex flex-column align-items-stretch py-3">
+      <canvas class="sphere-canvas" width="400" height="400"></canvas>
+
+      <div class="status-and-controls">
+        <!-- Status -->
+        <div class="mb-5 text-center">
+          <div>
+            <div><b>Rotation</b></div>
+            <div><span id="rotationOutput"></span>&deg;</div>
+          </div>
+          <div>
+            <div><b>Time</b></div>
+            <div><span id="timeOutput"></span> h</div>
+          </div>
+        </div>
+
+        <div class="d-md-flex flex-row justify-content-center column-gap-5">
+          <!-- Simulation -->
+          <div class="mb-5">
+            <h3>Simulation</h3>
+            <div>
+              <button
+                class="btn btn-primary"
+                type="button"
+                id="startStopButton"
+              >
+                Stop
+              </button>
+            </div>
+            <div>
+              <label class="form-label" for="rotationInput">Rotation</label>
+              <div class="input-group">
+                <input
+                  class="form-range"
+                  type="range"
+                  min="0"
+                  max="999"
+                  value="0"
+                  id="rotationInput"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Camera -->
+          <div class="mb-5">
+            <h3>Camera Mode</h3>
+            <div class="form-check">
+              <label class="form-check-label" for="cameraModeOverhead"
+                >overhead</label
+              >
+              <input
+                class="form-check-input"
+                type="radio"
+                name="cameraMode"
+                value="overhead"
+                id="cameraModeOverhead"
+              />
+            </div>
+            <div class="form-check">
+              <label class="form-check-label" for="cameraModeStatic"
+                >static</label
+              >
+              <input
+                class="form-check-input"
+                type="radio"
+                name="cameraMode"
+                value="static"
+                id="cameraModeStatic"
+                checked
+              />
+            </div>
+
+            <div class="mt-3">
+              <h4>Static Camera Position</h4>
+              <div>
+                <label class="form-label" for="staticCameraLatitudeInput"
+                  >Latitude</label
+                >
+                <div class="input-group">
+                  <input
+                    class="form-control form-control-sm"
+                    type="number"
+                    min="0"
+                    max="90"
+                    value="45"
+                    id="staticCameraLatitudeInput"
+                  />
+                  <span class="input-group-text">&deg;</span>
+                </div>
+              </div>
+              <div>
+                <label class="form-label" for="staticCameraRotationInput"
+                  >Rotation</label
+                >
+                <div class="input-group">
+                  <input
+                    class="form-control form-control-sm"
+                    type="number"
+                    min="0"
+                    max="359"
+                    value="50"
+                    id="staticCameraRotationInput"
+                  />
+                  <span class="input-group-text">&deg;</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Gyro -->
+          <div>
+            <h3>Gyro</h3>
+            <div>
+              <label class="form-label" for="latitudeInput">Latitude</label>
+              <div class="input-group">
+                <input
+                  class="form-control form-control-sm"
+                  type="number"
+                  min="0"
+                  max="90"
+                  id="latitudeInput"
+                  value="45"
+                />
+                <span class="input-group-text">&deg;</span>
+              </div>
+            </div>
+
+            <div>
+              <label class="label-block" for="gyroAxisOrientationInput"
+                >Axis Orientation</label
+              >
+              <select class="form-select" id="gyroAxisOrientationInput">
+                <option value="vertical">vertical</option>
+                <option value="horizontal">horizontal</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="./dist/index.js"></script>
+  </body>
+</html>

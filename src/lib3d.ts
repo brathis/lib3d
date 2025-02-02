@@ -1,8 +1,21 @@
-import { matmul4 } from "./matrix";
+import {
+  crossVertex,
+  matmul4,
+  matvec4,
+  normalizeVertex,
+  printMat4,
+  printVec4,
+  rotX,
+  rotZ,
+  toDegrees,
+  toVector,
+  toVertex,
+} from "./matrix";
 // @ts-ignore this is esbuild magic
-import vertexShader from "./vertex.glsl";
+import vertexShader from "./shaders/vertex.glsl";
 // @ts-ignore this is esbuild magic
-import fragmentShader from "./fragment.glsl";
+import fragmentShader from "./shaders/fragment.glsl";
+import { hashCode } from "./util";
 
 /**
  * Lib3d
@@ -10,10 +23,23 @@ import fragmentShader from "./fragment.glsl";
  * A graphics library for drawing triangles and lines using WebGL
  *
  */
-export interface Lib3dVertex {
+
+export type Lib3dHandle = number;
+
+export class Lib3dVertex {
   x: number;
   y: number;
   z: number;
+
+  constructor(init: {x: number, y: number, z: number}) {
+    this.x = init.x;
+    this.y = init.y;
+    this.z = init.z;
+  }
+
+  hashCode(): number {
+    return hashCode(`${this.x}${this.y}${this.z}`);
+  }
 }
 
 export interface Lib3dColor {
@@ -43,17 +69,38 @@ export interface Lib3dCamera {
   orientation: Lib3dCameraOrientation;
 }
 
-export interface Lib3dTriangle {
+export class Lib3dTriangle {
   v1: Lib3dVertex;
   v2: Lib3dVertex;
   v3: Lib3dVertex;
   c: Lib3dColor;
+
+  constructor(init: {v1: Lib3dVertex, v2: Lib3dVertex, v3: Lib3dVertex, c: Lib3dColor}) {
+    this.v1 = init.v1;
+    this.v2 = init.v2;
+    this.v3 = init.v3;
+    this.c = init.c;
+  }
+
+  hashCode(): number {
+    return hashCode(`${this.v1.hashCode()}${this.v2.hashCode()}${this.v3.hashCode()}`);
+  }
 }
 
-export interface Lib3dLine {
+export class Lib3dLine {
   v1: Lib3dVertex;
   v2: Lib3dVertex;
   c: Lib3dColor;
+
+  constructor(init: {v1: Lib3dVertex, v2: Lib3dVertex, c: Lib3dColor}) {
+    this.v1 = init.v1;
+    this.v2 = init.v2;
+    this.c = init.c;
+  }
+
+  hashCode(): number {
+    return hashCode(`${this.v1.hashCode()}${this.v2.hashCode()}`);
+  }
 }
 
 export class Lib3d {
@@ -68,7 +115,7 @@ export class Lib3d {
   private trianglePositionBuffer: WebGLBuffer;
   private triangleColorBuffer: WebGLBuffer;
   private triangleUniformMatrixLocation: WebGLUniformLocation | null;
-  private triangles: Lib3dTriangle[];
+  private triangles: Map<Lib3dHandle, Lib3dTriangle>;
   private trianglePositionBufferContent: number[];
   private triangleColorBufferContent: number[];
 
@@ -76,9 +123,20 @@ export class Lib3d {
   private linePositionBuffer: WebGLBuffer;
   private lineColorBuffer: WebGLBuffer;
   private lineUniformMatrixLocation: WebGLUniformLocation | null;
-  private lines: Lib3dLine[];
+  private lines: Map<Lib3dHandle, Lib3dLine>;
   private linePositionBufferContent: number[];
   private lineColorBufferContent: number[];
+
+  static readonly DEFAULT_CAMERA_POSITION: Lib3dVertex = new Lib3dVertex({
+    x: 0,
+    y: 1,
+    z: 0,
+  });
+  static readonly DEFAULT_CAMERA_ORIENTATION: Lib3dCameraOrientation = {
+    vx: new Lib3dVertex({ x: -1, y: 0, z: 0 }),
+    vy: new Lib3dVertex({ x: 0, y: 0, z: 1 }),
+    vz: new Lib3dVertex({ x: 0, y: 1, z: 0 }),
+  };
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -205,7 +263,7 @@ export class Lib3d {
       this.triangleProgram,
       "u_matrix"
     );
-    this.triangles = [];
+    this.triangles = new Map();
     this.trianglePositionBufferContent = [];
     this.triangleColorBufferContent = [];
   }
@@ -218,7 +276,7 @@ export class Lib3d {
       this.lineProgram,
       "u_matrix"
     );
-    this.lines = [];
+    this.lines = new Map();
     this.linePositionBufferContent = [];
     this.lineColorBufferContent = [];
   }
@@ -228,7 +286,7 @@ export class Lib3d {
 
     this.trianglePositionBufferContent = [];
     this.triangleColorBufferContent = [];
-    for (const t of this.triangles) {
+    for (const t of this.triangles.values()) {
       for (const v of [t.v1, t.v2, t.v3]) {
         for (const coordinate of [v.x, v.y, v.z, 1]) {
           this.trianglePositionBufferContent.push(coordinate);
@@ -295,13 +353,13 @@ export class Lib3d {
       0
     );
 
-    this.webgl.drawArrays(this.webgl.TRIANGLES, 0, 3 * this.triangles.length);
+    this.webgl.drawArrays(this.webgl.TRIANGLES, 0, 3 * this.triangles.size);
   }
 
   #updateLineBuffers() {
     this.linePositionBufferContent = [];
     this.lineColorBufferContent = [];
-    for (const l of this.lines) {
+    for (const l of this.lines.values()) {
       for (const v of [l.v1, l.v2]) {
         for (const coordinate of [v.x, v.y, v.z, 1]) {
           this.linePositionBufferContent.push(coordinate);
@@ -361,7 +419,7 @@ export class Lib3d {
       0
     );
 
-    this.webgl.drawArrays(this.webgl.LINES, 0, 2 * this.lines.length);
+    this.webgl.drawArrays(this.webgl.LINES, 0, 2 * this.lines.size);
   }
 
   #computeMatrix() {
@@ -475,13 +533,32 @@ export class Lib3d {
     // printMat4(this.invertCameraOrientationMatrix);
   }
 
-  addTriangle(triangle: Lib3dTriangle) {
-    this.triangles.push(triangle);
+  addTriangle(triangle: Lib3dTriangle): Lib3dHandle {
+    const handle = triangle.hashCode();
+    this.triangles.set(handle, triangle);
     this.#updateTriangleBuffers();
+    return handle;
   }
 
-  addLine(line: Lib3dLine) {
-    this.lines.push(line);
+  removeTriangle(handle: Lib3dHandle): void {
+    this.triangles.delete(handle);
+  }
+
+  addLine(line: Lib3dLine): Lib3dHandle {
+    const handle = line.hashCode();
+    this.lines.set(handle, line);
+    this.#updateLineBuffers();
+    return handle;
+  }
+
+  removeLine(handle: Lib3dHandle): void {
+    this.lines.delete(handle);
+  }
+
+  reset() {
+    this.triangles.clear();
+    this.lines.clear();
+    this.#updateTriangleBuffers();
     this.#updateLineBuffers();
   }
 
@@ -498,6 +575,23 @@ export class Lib3d {
   setCameraParameters(p: Lib3dCameraParameters) {
     this.camera.parameters = p;
     this.#computeProjectionMatrix();
+  }
+
+  lookAt(p: Lib3dVertex) {
+    const q = new Lib3dVertex({
+      x: this.camera.position.x - p.x,
+      y: this.camera.position.y - p.y,
+      z: this.camera.position.z - p.z,
+    });
+    const vz = normalizeVertex(q);
+    const vvx = crossVertex(new Lib3dVertex({ x: 0, y: 0, z: 1 }), vz);
+    const vx = normalizeVertex(vvx);
+    const vy = normalizeVertex(crossVertex(vz, vx));
+    this.setCameraOrientation({
+      vx: vx,
+      vy: vy,
+      vz: vz,
+    });
   }
 
   draw() {
