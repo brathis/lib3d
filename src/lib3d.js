@@ -123,8 +123,9 @@ export class Lib3d {
       this.webgl.canvas.height
     );
     this.webgl.enable(this.webgl.DEPTH_TEST);
+    this.webgl.depthFunc(this.webgl.GREATER);
     this.webgl.clearColor(1, 1, 1, 1);
-    this.webgl.clearDepth(1.0);
+    this.webgl.clearDepth(-1.0);
     this.webgl.clear(this.webgl.COLOR_BUFFER_BIT | this.webgl.DEPTH_BUFFER_BIT);
   }
 
@@ -365,10 +366,10 @@ export class Lib3d {
     // Matrices are represented as arrays in column-major order!
 
     const a =
-      -(this.camera.parameters.zfar + this.camera.parameters.znear) /
+      (this.camera.parameters.zfar + this.camera.parameters.znear) /
       (this.camera.parameters.zfar - this.camera.parameters.znear);
     const b =
-      -(2 * this.camera.parameters.zfar * this.camera.parameters.znear) /
+      (2 * this.camera.parameters.zfar * this.camera.parameters.znear) /
       (this.camera.parameters.zfar - this.camera.parameters.znear);
 
     this.projectionMatrix[0] =
