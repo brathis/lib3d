@@ -345,17 +345,28 @@ let dragXStart: number | null = null;
 let dragYStart: number | null = null;
 let dragCameraPositionLatitudeDegStart: number | null = null;
 let dragCameraPositionRotationDegStart: number | null = null;
-canvas.addEventListener("mousedown", (event) => {
+function getCoordinates(event: MouseEvent | TouchEvent): {
+  x: number;
+  y: number;
+} {
+  if (MouseEvent.prototype.isPrototypeOf(event)) {
+    return { x: (event as MouseEvent).pageX, y: (event as MouseEvent).pageY };
+  } else if (TouchEvent.prototype.isPrototypeOf(event)) {
+    let touch = (event as TouchEvent).touches[0];
+    return { x: touch.pageX, y: touch.pageX };
+  }
+  throw new Error("event is neither MouseEvent nor TouchEvent");
+}
+function dragStart(event: MouseEvent | TouchEvent) {
   if (state.getCameraMode() === CameraMode.STATIC) {
     dragState = true;
-    dragXStart = event.pageX;
-    dragYStart = event.pageY;
+    ({ x: dragXStart, y: dragYStart } = getCoordinates(event));
     const cameraPositionStart = state.getCameraPosition();
     dragCameraPositionLatitudeDegStart = cameraPositionStart.latitudeDeg;
     dragCameraPositionRotationDegStart = cameraPositionStart.rotationDeg;
   }
-});
-body.addEventListener("mousemove", (event) => {
+}
+function drag(event: MouseEvent | TouchEvent) {
   if (
     dragState &&
     state.getCameraMode() === CameraMode.STATIC &&
@@ -364,19 +375,29 @@ body.addEventListener("mousemove", (event) => {
     dragCameraPositionLatitudeDegStart !== null &&
     dragCameraPositionRotationDegStart !== null
   ) {
-    const dx = event.pageX - dragXStart;
-    const dy = event.pageY - dragYStart;
+    const { x, y } = getCoordinates(event);
+    const dx = x - dragXStart;
+    const dy = y - dragYStart;
     state.setCameraPosition({
-      latitudeDeg: dragCameraPositionLatitudeDegStart + dy * LATITUDE_GAIN,
+      latitudeDeg: Math.min(
+        90,
+        Math.max(0, dragCameraPositionLatitudeDegStart + dy * LATITUDE_GAIN)
+      ),
       rotationDeg: dragCameraPositionRotationDegStart - dx * ROTATION_GAIN,
     });
   }
-});
-body.addEventListener("mouseup", (event) => {
+}
+function dragEnd() {
   if (dragState) {
     dragState = false;
   }
-});
+}
+canvas.addEventListener("mousedown", dragStart);
+canvas.addEventListener("touchstart", dragStart);
+body.addEventListener("mousemove", drag);
+body.addEventListener("touchmove", drag);
+body.addEventListener("mouseup", dragEnd);
+body.addEventListener("touchend", dragEnd);
 
 state.invokeAllCallbacks();
 window.requestAnimationFrame(drawAndReschedule);
