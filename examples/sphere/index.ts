@@ -75,6 +75,10 @@ let cameraPositionFunction: (t: number) => Lib3dVertex = (t) =>
     state.getCameraPosition().rotationDeg
   );
 
+const body = document.querySelector("body");
+if (body === null) {
+  throw new Error("could not find body element");
+}
 const canvas = document.querySelector("canvas");
 if (canvas === null) {
   throw new Error("could not find canvas element");
@@ -188,12 +192,6 @@ const gyroAxisOrientationInput = document.querySelector(
   "#gyroAxisOrientationInput"
 );
 const startStopButton = document.querySelector("#startStopButton");
-const staticCameraLatitudeInput = document.querySelector(
-  "#staticCameraLatitudeInput"
-);
-const staticCameraRotationInput = document.querySelector(
-  "#staticCameraRotationInput"
-);
 
 const rotationOutput = document.querySelector("#rotationOutput");
 const timeOutput = document.querySelector("#timeOutput");
@@ -211,6 +209,11 @@ if (sliderInput) {
 state.setCallback("rotationAngleRad", (angleRadians: number) => {
   if (latitudeInput != null) {
     (latitudeInput as HTMLInputElement).disabled = angleRadians != 0;
+  }
+
+  if (gyroAxisOrientationInput != null) {
+    (gyroAxisOrientationInput as HTMLSelectElement).disabled =
+      angleRadians != 0;
   }
 
   if (rotationOutput != null) {
@@ -334,24 +337,45 @@ state.setCallback("isStopped", (isStopped: boolean) => {
   }
 });
 
-// staticCameraLatitude & staticCameraRotation
-staticCameraLatitudeInput?.addEventListener("input", () => {
-  const cameraPosition = state.getCameraPosition();
-  state.setCameraPosition({
-    latitudeDeg: Number.parseInt(
-      (staticCameraLatitudeInput as HTMLInputElement).value
-    ),
-    rotationDeg: cameraPosition.rotationDeg,
-  });
+// mouse navigation
+const LATITUDE_GAIN = 90 / 400;
+const ROTATION_GAIN = 180 / 400;
+let dragState = false;
+let dragXStart: number | null = null;
+let dragYStart: number | null = null;
+let dragCameraPositionLatitudeDegStart: number | null = null;
+let dragCameraPositionRotationDegStart: number | null = null;
+canvas.addEventListener("mousedown", (event) => {
+  if (state.getCameraMode() === CameraMode.STATIC) {
+    dragState = true;
+    dragXStart = event.pageX;
+    dragYStart = event.pageY;
+    const cameraPositionStart = state.getCameraPosition();
+    dragCameraPositionLatitudeDegStart = cameraPositionStart.latitudeDeg;
+    dragCameraPositionRotationDegStart = cameraPositionStart.rotationDeg;
+  }
 });
-staticCameraRotationInput?.addEventListener("input", () => {
-  const cameraPosition = state.getCameraPosition();
-  state.setCameraPosition({
-    latitudeDeg: cameraPosition.latitudeDeg,
-    rotationDeg: Number.parseInt(
-      (staticCameraRotationInput as HTMLInputElement).value
-    ),
-  });
+body.addEventListener("mousemove", (event) => {
+  if (
+    dragState &&
+    state.getCameraMode() === CameraMode.STATIC &&
+    dragXStart !== null &&
+    dragYStart !== null &&
+    dragCameraPositionLatitudeDegStart !== null &&
+    dragCameraPositionRotationDegStart !== null
+  ) {
+    const dx = event.pageX - dragXStart;
+    const dy = event.pageY - dragYStart;
+    state.setCameraPosition({
+      latitudeDeg: dragCameraPositionLatitudeDegStart + dy * LATITUDE_GAIN,
+      rotationDeg: dragCameraPositionRotationDegStart - dx * ROTATION_GAIN,
+    });
+  }
+});
+body.addEventListener("mouseup", (event) => {
+  if (dragState) {
+    dragState = false;
+  }
 });
 
 state.invokeAllCallbacks();
