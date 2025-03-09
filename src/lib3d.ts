@@ -16,6 +16,7 @@ import vertexShader from "./shaders/vertex.glsl";
 // @ts-ignore this is esbuild magic
 import fragmentShader from "./shaders/fragment.glsl";
 import { hashCode } from "./util";
+import { Region, RegionAware, RegionManager } from "./buffer";
 
 /**
  * Lib3d
@@ -26,12 +27,56 @@ import { hashCode } from "./util";
 
 export type Lib3dHandle = number;
 
+class Lib3dVertexProxyHandler implements ProxyHandler<Lib3dVertex> {
+  private region: Region;
+
+  constructor(region: Region) {
+    this.region = region;
+  }
+
+  set(target: Lib3dVertex, p: string | symbol, newValue: any): boolean {
+    if (p === "x") {
+      this.region.write(0, newValue);
+    } else if (p === "y") {
+      this.region.write(1, newValue);
+    } else if (p === "z") {
+      this.region.write(2, newValue);
+    }
+
+    target[p] = newValue;
+    return true;
+  }
+}
+
+class Lib3dColorProxyHandler implements ProxyHandler<Lib3dColor> {
+  private region: Region;
+
+  constructor(region: Region) {
+    this.region = region;
+  }
+
+  set(target: Lib3dColor, p: string | symbol, newValue: any): boolean {
+    if (p === "r") {
+      this.region.write(0, newValue);
+    } else if (p === "g") {
+      this.region.write(1, newValue);
+    } else if (p === "b") {
+      this.region.write(2, newValue);
+    } else if (p === "a") {
+      this.region.write(3, newValue);
+    }
+
+    target[p] = newValue;
+    return true;
+  }
+}
+
 export class Lib3dVertex {
   x: number;
   y: number;
   z: number;
 
-  constructor(init: {x: number, y: number, z: number}) {
+  constructor(init: { x: number; y: number; z: number }) {
     this.x = init.x;
     this.y = init.y;
     this.z = init.z;
@@ -75,15 +120,38 @@ export class Lib3dTriangle {
   v3: Lib3dVertex;
   c: Lib3dColor;
 
-  constructor(init: {v1: Lib3dVertex, v2: Lib3dVertex, v3: Lib3dVertex, c: Lib3dColor}) {
-    this.v1 = init.v1;
-    this.v2 = init.v2;
-    this.v3 = init.v3;
-    this.c = init.c;
+  constructor(
+    init: {
+      v1: Lib3dVertex;
+      v2: Lib3dVertex;
+      v3: Lib3dVertex;
+      c: Lib3dColor;
+    },
+    vertexRegionManager: RegionManager,
+    colorRegionManager: RegionManager
+  ) {
+    this.v1 = new Proxy(
+      init.v1,
+      new Lib3dVertexProxyHandler(vertexRegionManager.allocateRegion(3, this))
+    );
+    this.v2 = new Proxy(
+      init.v2,
+      new Lib3dVertexProxyHandler(vertexRegionManager.allocateRegion(3, this))
+    );
+    this.v3 = new Proxy(
+      init.v3,
+      new Lib3dVertexProxyHandler(vertexRegionManager.allocateRegion(3, this))
+    );
+    this.c = new Proxy(
+      init.c,
+      new Lib3dColorProxyHandler(colorRegionManager.allocateRegion(4, this))
+    );
   }
 
   hashCode(): number {
-    return hashCode(`${this.v1.hashCode()}${this.v2.hashCode()}${this.v3.hashCode()}`);
+    return hashCode(
+      `${this.v1.hashCode()}${this.v2.hashCode()}${this.v3.hashCode()}`
+    );
   }
 }
 
@@ -92,10 +160,23 @@ export class Lib3dLine {
   v2: Lib3dVertex;
   c: Lib3dColor;
 
-  constructor(init: {v1: Lib3dVertex, v2: Lib3dVertex, c: Lib3dColor}) {
-    this.v1 = init.v1;
-    this.v2 = init.v2;
-    this.c = init.c;
+  constructor(
+    init: { v1: Lib3dVertex; v2: Lib3dVertex; c: Lib3dColor },
+    vertexRegionManager: RegionManager,
+    colorRegionManager: RegionManager
+  ) {
+    this.v1 = new Proxy(
+      init.v1,
+      new Lib3dVertexProxyHandler(vertexRegionManager.allocateRegion(3, this))
+    );
+    this.v2 = new Proxy(
+      init.v2,
+      new Lib3dVertexProxyHandler(vertexRegionManager.allocateRegion(3, this))
+    );
+    this.c = new Proxy(
+      init.c,
+      new Lib3dColorProxyHandler(colorRegionManager.allocateRegion(4, this))
+    );
   }
 
   hashCode(): number {
@@ -118,6 +199,8 @@ export class Lib3d {
   private triangles: Map<Lib3dHandle, Lib3dTriangle>;
   private trianglePositionBufferContent: number[];
   private triangleColorBufferContent: number[];
+  private trianglePositionRegionManager: RegionManager;
+  private triangleColorRegionManager: RegionManager;
 
   private lineProgram: WebGLProgram;
   private linePositionBuffer: WebGLBuffer;
@@ -126,6 +209,8 @@ export class Lib3d {
   private lines: Map<Lib3dHandle, Lib3dLine>;
   private linePositionBufferContent: number[];
   private lineColorBufferContent: number[];
+  private linePositionRegionManager: RegionManager;
+  private lineColorRegionManager: RegionManager;
 
   static readonly DEFAULT_CAMERA_POSITION: Lib3dVertex = new Lib3dVertex({
     x: 0,
@@ -152,6 +237,23 @@ export class Lib3d {
 
     this.triangleProgram = this.#createProgram(vertexShader, fragmentShader);
     this.lineProgram = this.#createProgram(vertexShader, fragmentShader);
+
+    this.trianglePositionRegionManager = new RegionManager(
+      this.trianglePositionBufferContent,
+      null
+    );
+    this.triangleColorRegionManager = new RegionManager(
+      this.triangleColorBufferContent,
+      null
+    );
+    this.linePositionRegionManager = new RegionManager(
+      this.linePositionBufferContent,
+      null
+    );
+    this.lineColorRegionManager = new RegionManager(
+      this.lineColorBufferContent,
+      null
+    );
 
     this.#setupMatrices();
     this.#setupTriangleProgram();
@@ -533,7 +635,17 @@ export class Lib3d {
     // printMat4(this.invertCameraOrientationMatrix);
   }
 
-  addTriangle(triangle: Lib3dTriangle): Lib3dHandle {
+  addTriangle(triangleInit: {
+    v1: Lib3dVertex;
+    v2: Lib3dVertex;
+    v3: Lib3dVertex;
+    c: Lib3dColor;
+  }): Lib3dHandle {
+    const triangle = new Lib3dTriangle(
+      triangleInit,
+      this.trianglePositionRegionManager,
+      this.triangleColorRegionManager
+    );
     const handle = triangle.hashCode();
     this.triangles.set(handle, triangle);
     this.#updateTriangleBuffers();
@@ -544,7 +656,16 @@ export class Lib3d {
     this.triangles.delete(handle);
   }
 
-  addLine(line: Lib3dLine): Lib3dHandle {
+  addLine(lineInit: {
+    v1: Lib3dVertex;
+    v2: Lib3dVertex;
+    c: Lib3dColor;
+  }): Lib3dHandle {
+    const line = new Lib3dLine(
+      lineInit,
+      this.linePositionRegionManager,
+      this.lineColorRegionManager
+    );
     const handle = line.hashCode();
     this.lines.set(handle, line);
     this.#updateLineBuffers();
